@@ -1,19 +1,21 @@
-
 /*
+**    Copyright 2010, The LimeIME Open Source Project
 **
-** Copyright 2008, The Android Open Source Project
+**    Project Url: http://code.google.com/p/limeime/
+**                 http://android.toload.net/
 **
-** Licensed under the Apache License, Version 2.0 (the "License");
-** you may not use this file except in compliance with the License.
-** You may obtain a copy of the License at
-**
-**     http://www.apache.org/licenses/LICENSE-2.0
-**
-** Unless required by applicable law or agreed to in writing, software
-** distributed under the License is distributed on an "AS IS" BASIS,
-** WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-** See the License for the specific language governing permissions and
-** limitations under the License.
+**    This program is free software: you can redistribute it and/or modify
+**    it under the terms of the GNU General Public License as published by
+**    the Free Software Foundation, either version 3 of the License, or
+**    (at your option) any later version.
+
+**    This program is distributed in the hope that it will be useful,
+**    but WITHOUT ANY WARRANTY; without even the implied warranty of
+**    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+**    GNU General Public License for more details.
+
+**    You should have received a copy of the GNU General Public License
+**    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 package net.toload.main;
@@ -44,6 +46,8 @@ import net.toload.main.R.dimen;
  */
 public class CandidateView extends View {
 
+	private static final boolean DEBUG = false;
+
     private static final int OUT_OF_BOUNDS = -1;
 
     private LIMEService mService;
@@ -58,12 +62,18 @@ public class CandidateView extends View {
     private static final int MAX_SUGGESTIONS = 200;
     private static final int SCROLL_PIXELS = 20;
 
+    // Add by Jeremy '10, 3, 29.
+    // Suggestions size. Set to MAX_GUGGESTIONS if larger then it.
+    private int count =0 ;
+
     private int[] mWordWidth = new int[MAX_SUGGESTIONS];
     private int[] mWordX = new int[MAX_SUGGESTIONS];
 
     private static final int X_GAP = 10;
 
     private static final List<Mapping> EMPTY_LIST = new LinkedList<Mapping>();
+
+
 
     private int currentX;
     private int mColorNormal;
@@ -196,6 +206,9 @@ public class CandidateView extends View {
      */
     @Override
     protected void onDraw(Canvas canvas) {
+	if(DEBUG){
+		Log.i("Candidateview:OnDraw", "Suggestion count:" + count+" mSuggestions.size:" + mSuggestions.size());
+	}
         if (canvas != null) {
             super.onDraw(canvas);
         }
@@ -208,8 +221,8 @@ public class CandidateView extends View {
                 getBackground().getPadding(mBgPadding);
             }
         }
-        int x = 0;
-        final int count = mSuggestions.size();
+
+        //final int count = mSuggestions.size();
         final int height = getHeight();
         final Rect bgPadding = mBgPadding;
         final Paint paint = mPaint;
@@ -219,32 +232,50 @@ public class CandidateView extends View {
         final boolean typedWordValid = mTypedWordValid;
         final int y = (int) (((height - mPaint.getTextSize()) / 2) - mPaint.ascent());
 
-
+        // Modified by jeremy '10, 3, 29.  Update mselectedindex if touched and build wordX[i] and wordwidth[i]
+        int x = 0;
         for (int i = 0; i < count; i++) {
-            String suggestion = mSuggestions.get(i).getWord();
+		if(DEBUG){
+			Log.i("Candidateview:OnDraw", "updaingting:" + i );
+		}
+		String suggestion = mSuggestions.get(i).getWord();
             float textWidth = paint.measureText(suggestion);
             final int wordWidth = (int) textWidth + X_GAP * 2;
 
             mWordX[i] = x;
             mWordWidth[i] = wordWidth;
-            paint.setColor(mColorNormal);
-            if (touchX + scrollX >= x && touchX + scrollX < x + wordWidth && !scrolled) {
-                if (canvas != null) {
-                    canvas.translate(x, 0);
-                    mSelectionHighlight.setBounds(0, bgPadding.top, wordWidth, height);
-                    mSelectionHighlight.draw(canvas);
-                    canvas.translate(-x, 0);
-                }
-                mSelectedIndex = i;
-            }
 
-            if (canvas != null) {
+            if (touchX + scrollX >= x && touchX + scrollX < x + wordWidth && !scrolled) {
+                mSelectedIndex = i;}
+            x += wordWidth;
+        }
+        mTotalWidth = x;
+
+
+        // Moved from above by jeremy '10 3, 29. Paint mselectedindex in highlight here
+        if (canvas != null && mSelectedIndex >=0) {
+            canvas.translate(mWordX[mSelectedIndex], 0);
+            mSelectionHighlight.setBounds(0, bgPadding.top, mWordWidth[mSelectedIndex], height);
+            mSelectionHighlight.draw(canvas);
+            canvas.translate(-mWordX[mSelectedIndex], 0);
+        }
+
+        // Paint all the suggestions and lines.
+        if (canvas != null) {
+		for (int i = 0; i < count; i++) {
+			if(DEBUG){
+				Log.i("Candidateview:OnDraw","i:" + i + "  Drawing:" + mSuggestions.get(i).getWord() );
+			}
+
+
+
                 //if ((i == 1 && !typedWordValid) || (i == 0 && typedWordValid)) {
                 //    paint.setFakeBoldText(true);
                 //    paint.setColor(mColorRecommended);
+		String suggestion = mSuggestions.get(i).getWord();
 
                 if(mSuggestions.get(i).isDictionary()){
-                    if(i == 0){
+			if(i == 0){
 			paint.setColor(mColorDictionary);
                     } else if (i != 0) {
                         paint.setColor(mColorDictionary);
@@ -256,19 +287,18 @@ public class CandidateView extends View {
                         paint.setColor(mColorOther);
                     }
                 }
-                canvas.drawText(suggestion, x + X_GAP, y, paint);
+                canvas.drawText(suggestion, mWordX[i] + X_GAP, y, paint);
                 paint.setColor(mColorOther);
-                canvas.drawLine(x + wordWidth + 0.5f, bgPadding.top,
-                        x + wordWidth + 0.5f, height + 1, paint);
+                canvas.drawLine(mWordX[i] + mWordWidth[i] + 0.5f, bgPadding.top,
+				mWordX[i] + mWordWidth[i] + 0.5f, height + 1, paint);
                 paint.setFakeBoldText(false);
             }
-            x += wordWidth;
+
         }
-        mTotalWidth = x;
+
         if (mTargetScrollX != getScrollX()) {
             scrollToTarget();
         }
-
     }
 
     private void scrollToTarget() {
@@ -297,8 +327,25 @@ public class CandidateView extends View {
             mSuggestions = new LinkedList<Mapping>(suggestions);
         }
 
+        if(DEBUG){
+		Log.i("setSuggestions:","mSuggestions.size:" + mSuggestions.size());
+        }
+
         if(mSuggestions != null && mSuggestions.size() > 0){
             setBackgroundColor(bgcolor);
+            // Add by Jeremy '10, 3, 29
+            count = mSuggestions.size();
+            if(count > MAX_SUGGESTIONS) count = MAX_SUGGESTIONS;
+
+            if(mSuggestions.get(0).isDictionary()){
+		// no default selection for related words
+		mSelectedIndex = -1;
+            }else if(mSuggestions.size() == 1){
+		mSelectedIndex = 0;
+            }else {
+		// default selection on suggestions 1 (0 is typed English in mixed English mode)
+		mSelectedIndex = 1;
+            }
         }else{
             setBackgroundColor(0);
         }
@@ -315,6 +362,8 @@ public class CandidateView extends View {
     public void clear() {
 	currentX = 0;
         mSuggestions = EMPTY_LIST;
+        // Jeremy '10, 4, 8
+        count =0;
         mTouchX = OUT_OF_BOUNDS;
         mSelectedIndex = -1;
         invalidate();
@@ -372,7 +421,7 @@ public class CandidateView extends View {
 
     public void scrollPrev() {
         int i = 0;
-        final int count = mSuggestions.size();
+        //final int count = mSuggestions.size();
         int firstItem = 0; // Actually just before the first item, if at the boundary
         while (i < count) {
             if (mWordX[i] < currentX
@@ -392,10 +441,11 @@ public class CandidateView extends View {
         updateScrollPosition(leftEdge);
     }
 
+
     public void scrollNext() {
         int i = 0;
         int targetX = currentX;
-        final int count = mSuggestions.size();
+        //final int count = mSuggestions.size();
         int rightEdge = currentX + getWidth();
         while (i < count) {
             if (mWordX[i] <= rightEdge &&
@@ -419,12 +469,44 @@ public class CandidateView extends View {
         }
     }
 
+    //Add by Jeremy '10, 3, 29 for DPAD (physical keyboard) selection.
+    public void selectNext() {
+	if (mSuggestions == null) return;
+	if(mSelectedIndex < count-1){
+		mSelectedIndex++;
+		if(mWordX[mSelectedIndex] + mWordWidth[mSelectedIndex] > currentX + getWidth()) scrollNext();
+	}
+	invalidate();
+    }
+
+    public void selectPrev() {
+	if (mSuggestions == null) return;
+        if(mSelectedIndex > 0) {
+		mSelectedIndex--;
+		if(mWordX[mSelectedIndex] < currentX) scrollPrev();
+        }
+        invalidate();
+    }
+    public boolean takeSelectedSuggestion(){
+	if(DEBUG){
+		Log.i("takeSeelctionSuggestion", "mSelectedIndex:" + mSelectedIndex);
+	}
+	if (mSuggestions != null &&(mSelectedIndex >= 0) ) {
+		mService.pickSuggestionManually(mSelectedIndex);
+		return true;  // Selection picked
+        }else{
+		return false;
+        }
+
+    }
+
     /**
      * For flick through from keyboard, call this method with the x coordinate of the flick
      * gesture.
      * @param x
      */
     public void takeSuggestionAt(float x) {
+
         mTouchX = (int) x;
         // To detect candidate
         onDraw(null);

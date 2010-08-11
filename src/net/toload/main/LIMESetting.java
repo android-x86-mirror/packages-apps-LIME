@@ -1,10 +1,32 @@
+/*
+**    Copyright 2010, The LimeIME Open Source Project
+**
+**    Project Url: http://code.google.com/p/limeime/
+**                 http://android.toload.net/
+**
+**    This program is free software: you can redistribute it and/or modify
+**    it under the terms of the GNU General Public License as published by
+**    the Free Software Foundation, either version 3 of the License, or
+**    (at your option) any later version.
+
+**    This program is distributed in the hope that it will be useful,
+**    but WITHOUT ANY WARRANTY; without even the implied warranty of
+**    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+**    GNU General Public License for more details.
+
+**    You should have received a copy of the GNU General Public License
+**    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
 package net.toload.main;
 
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
@@ -25,6 +47,7 @@ import android.content.SharedPreferences;
 import android.content.DialogInterface.OnCancelListener;
 import android.content.res.Resources;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Message;
@@ -36,17 +59,21 @@ import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.View;
+import android.view.Window;
+import android.view.WindowManager;
 import android.view.ContextMenu.ContextMenuInfo;
 import android.view.View.OnClickListener;
+import android.view.View.OnTouchListener;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.ListView;
+import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 import android.widget.AdapterView.OnItemClickListener;
-
 import android.database.Cursor;
 import android.database.sqlite.SQLiteCursor;
 
@@ -57,11 +84,34 @@ import android.database.sqlite.SQLiteCursor;
  */
 public class LIMESetting extends Activity {
 
+	private final static boolean DEBUG = false;
+
 	private final static String TOTAL_RECORD = "total_record";
+	// Add by Jeremy '10, 3 ,27. Multi table extension.
+	private final static String CJ_TOTAL_RECORD = "cj_total_record";
+	private final static String BPMF_TOTAL_RECORD = "bpmf_total_record";
+	private final static String DAYI_TOTAL_RECORD = "dayi_total_record";
+	private final static String EZ_TOTAL_RECORD = "ez_total_record";
+	private final static String RELATED_TOTAL_RECORD = "related_total_record";
+	//----------add by Jeremy '10,3,12 ----------------------------------------
+	private final static String TOTAL_USERDICT_RECORD = "total_userdict_record";
+	//-------------------------------------------------------------------------
 	private final static String MAPPING_VERSION = "mapping_version";
+	// Add by Jeremy '10, 3 ,27. Multi table extension.
+	private final static String CJ_MAPPING_VERSION = "cj_mapping_version";
+	private final static String BPMF_MAPPING_VERSION = "bmpf_mapping_version";
+	private final static String DAYI_MAPPING_VERSION = "dayi_mapping_version";
+	private final static String EZ_MAPPING_VERSION = "ez_mapping_version";
+	private final static String RELATED_MAPPING_VERSION = "related_mapping_version";
 	private final static String MAPPING_LOADING = "mapping_loading";
 	private final static String MAPPING_RESET = "mapping_reset";
+	// Add by Jeremy '10, 3 ,27. Multi table extension.
+	private final static String CJ_MAPPING_FILE_TEMP = "cj_mapping_file_temp";
+	private final static String DAYI_MAPPING_FILE_TEMP = "dayi_mapping_file_temp";
+	private final static String EZ_MAPPING_FILE_TEMP = "ez_mapping_file_temp";
+	private final static String BPMF_MAPPING_FILE_TEMP = "bpmf_mapping_file_temp";
 	private final static String MAPPING_FILE_TEMP = "mapping_file_temp";
+	private final static String RELATED_FILE_TEMP = "related_file_temp";
 
 	private ArrayList<File> filelist;
 
@@ -74,7 +124,7 @@ public class LIMESetting extends Activity {
 
 	private AlertDialog ad;
 
-	private String localRoot = "/sdcard";
+	private String localRoot = null;
 	private boolean hasSelectFile;
 
 	private static LimeDB limedb;
@@ -84,9 +134,20 @@ public class LIMESetting extends Activity {
 	private File mappingSrc;
 	private TextView txtVersion;
 	private TextView txtAmount;
+	private TextView cjtxtVersion;
+	private TextView cjtxtAmount;
+	private TextView dayitxtVersion;
+	private TextView dayitxtAmount;
+	private TextView bpmftxtVersion;
+	private TextView bpmftxtAmount;
+	private TextView eztxtVersion;
+	private TextView eztxtAmount;
+	private TextView relatedtxtVersion;
+	private TextView relatedtxtAmount;
 	private TextView txtDictionaryAmount;
 	private TextView txtMappingVersion;
 
+	private ScrollView scrollSetting;
 	private Thread thread = null;
 	private Resources res = null;
 	private Context ctx = null;
@@ -111,76 +172,43 @@ public class LIMESetting extends Activity {
 		// Startup Service
 		getApplicationContext().bindService(new Intent(IDBService.class.getName()), serConn, Context.BIND_AUTO_CREATE);
 
-		// Handle Load Mapping
-		btnLoadLocal = (Button) this.findViewById(R.id.btnLoadLocal);
-		btnLoadLocal.setOnClickListener(new OnClickListener() {
-			public void onClick(View v) {
-				 hasSelectFile = false;
-				 selectLimeFile(localRoot);
-			}
-		});
+		// Add by Jeremy '10, 3, 27. reset loading status.
+		// ctx.getSharedPreferences(MAPPING_LOADING, 0).edit().putString(MAPPING_LOADING, "no").commit();
 
-		// Handle Reset Mapping
-		btnReset = (Button) this.findViewById(R.id.btnReset);
-		btnReset.setOnClickListener(new OnClickListener() {
-			public void onClick(View v) {
-				try {
-					Toast.makeText(v.getContext(), R.string.lime_setting_notification_mapping_reset, Toast.LENGTH_LONG).show();
-					DBSrv.resetMapping();
-				} catch (RemoteException e) {
-					e.printStackTrace();
-				}
-				updateInfomation();
-			}
-		});
+		// Get sdcard path from enviroment
+		localRoot = Environment.getExternalStorageDirectory().getAbsolutePath() +"/lime" ;
 
-		// Handle Reset Dictionary
-		btnResetDictionary = (Button) this.findViewById(R.id.btnResetDictionary);
-		btnResetDictionary.setOnClickListener(new OnClickListener() {
-			public void onClick(View v) {
-				try {
-					Toast.makeText(v.getContext(), R.string.lime_setting_notification_userdic_reset, Toast.LENGTH_LONG).show();
-					DBSrv.resetUserBackup();
-				} catch (RemoteException e) {
-					e.printStackTrace();
-				}
-				updateInfomation();
-			}
-		});
+		File targetDir = new File(localRoot);
+		if(!targetDir.exists()){
+			targetDir.mkdirs();
+		}
 
-		// Backup Related Database
-		btnBackup = (Button) this.findViewById(R.id.btnBackup);
-		btnBackup.setOnClickListener(new OnClickListener() {
-			public void onClick(View v) {
-				try {
-					Toast.makeText(v.getContext(), R.string.lime_setting_notification_userdic_backup, Toast.LENGTH_LONG).show();
-					DBSrv.executeUserBackup();
-				} catch (RemoteException e) {
-					e.printStackTrace();
-				}
-				updateInfomation();
-			}
-		});
+		// Copy raw .cin file into /sdcard/lime/
+		copyRAWFile(getResources().openRawResource(R.raw.bpmf), localRoot + "/bpmf.cin" );
+		copyRAWFile(getResources().openRawResource(R.raw.cj), localRoot + "/cj.cin" );
+		//copyRAWFile(getResources().openRawResource(R.raw.dayi3), localRoot + "/dayi3.cin" );
+		copyRAWFile(getResources().openRawResource(R.raw.ez), localRoot + "/ez.lime" );
+		copyRAWFile(getResources().openRawResource(R.raw.scj6), localRoot + "/scj6.lime" );
+		copyRAWFile(getResources().openRawResource(R.raw.assoc), localRoot + "/assoc.lime" );
 
-		// Restore Related Database
-		btnRestore = (Button) this.findViewById(R.id.btnRestore);
-		btnRestore.setOnClickListener(new OnClickListener() {
-			public void onClick(View v) {
-				try {
-					Toast.makeText(v.getContext(), R.string.lime_setting_notification_userdic_restore, Toast.LENGTH_LONG).show();
-					DBSrv.restoreRelatedUserdic();
-				} catch (RemoteException e) {
-					e.printStackTrace();
-				}
-				updateInfomation();
-			}
-		});
-
-		// Update Information
-		updateInfomation();
+		 // return if db is busy.
+		SharedPreferences importset = ctx.getSharedPreferences(MAPPING_LOADING, 0);
+		if( (importset.getString(MAPPING_LOADING, "null")).equals("null")){
+			// Reset Mapping Database
+			ctx.getSharedPreferences(MAPPING_LOADING, 0).edit().putString(MAPPING_LOADING, "no").commit();
+			return;
+		}
 
 	}
 
+	private void resetMapping(String tablename){
+		try {
+			Toast.makeText(this, R.string.lime_setting_notification_mapping_reset, Toast.LENGTH_LONG).show();
+			DBSrv.resetMapping(tablename);
+			} catch (RemoteException e) {
+				e.printStackTrace();
+			}
+	}
 	private ServiceConnection serConn = new ServiceConnection() {
 		public void onServiceConnected(ComponentName name, IBinder service) {
 			DBSrv = IDBService.Stub.asInterface(service);
@@ -189,31 +217,104 @@ public class LIMESetting extends Activity {
 
 	};
 
+
+	private void backgroundUpdate(){
+		if(thread != null){
+			thread.stop();
+			thread = null;
+		}
+		thread = new Thread() {
+			public void run() {
+
+				boolean dbbusy = true;
+
+				while(dbbusy){
+					try {
+						Thread.sleep(1000);
+						if(DEBUG){
+							Log.i("Settings:backgrounUpdate", "dbbusy:"+dbbusy);
+						}
+						updateInformation();
+						if(ctx.getSharedPreferences(MAPPING_LOADING, 0)
+								.getString(MAPPING_LOADING, "").equals("no")){
+							dbbusy = false;
+						}
+					} catch (InterruptedException e1) {
+						// TODO Auto-generated catch block
+						e1.printStackTrace();
+					}
+					if(DEBUG){
+						Log.i("Settings:backgrounUpdate", "dbbusy:"+dbbusy);
+					}
+					updateInformation();
+					if(ctx.getSharedPreferences(MAPPING_LOADING, 0)
+							.getString(MAPPING_LOADING, "").equals("no")){
+						dbbusy = false;
+					}
+				}
+
+				if(DEBUG){
+					Log.i("Settings:backgrounUpdate", "end");
+				}
+			}
+		};
+		thread.start();
+	}
 	/**
 	 * Update LIME setting panel display
 	 */
-	public void updateInfomation() {
+	public void updateInformation() {
 
 		try {
 
 			try {
-				SharedPreferences settings = ctx.getSharedPreferences(
-						TOTAL_RECORD, 0);
-				String recordString = settings.getString(TOTAL_RECORD, "");
+				SharedPreferences settings = ctx.getSharedPreferences(TOTAL_RECORD, 0);
+				String total = settings.getString(TOTAL_RECORD, "");
+				SharedPreferences cjsettings = ctx.getSharedPreferences(CJ_TOTAL_RECORD, 0);
+				String cjtotal = cjsettings.getString(CJ_TOTAL_RECORD, "");
+				SharedPreferences dayisettings = ctx.getSharedPreferences(DAYI_TOTAL_RECORD, 0);
+				String dayitotal = dayisettings.getString(DAYI_TOTAL_RECORD, "");
+				SharedPreferences bpmfsettings = ctx.getSharedPreferences(BPMF_TOTAL_RECORD, 0);
+				String bpmftotal = bpmfsettings.getString(BPMF_TOTAL_RECORD, "");
+				SharedPreferences ezsettings = ctx.getSharedPreferences(EZ_TOTAL_RECORD, 0);
+				String eztotal = ezsettings.getString(EZ_TOTAL_RECORD, "");
+				SharedPreferences relatedsettings = ctx.getSharedPreferences(RELATED_TOTAL_RECORD, 0);
+				String relatedtotal = relatedsettings.getString(RELATED_TOTAL_RECORD, "");
 
-				String total = recordString;
+
 				txtAmount = (TextView) this.findViewById(R.id.txtInfoAmount);
 				txtAmount.setText(total);
-			} catch (Exception e) {
-			}
+				cjtxtAmount = (TextView) this.findViewById(R.id.cjtxtInfoAmount);
+				cjtxtAmount.setText(cjtotal);
+				dayitxtAmount = (TextView) this.findViewById(R.id.dayitxtInfoAmount);
+				dayitxtAmount.setText(dayitotal);
+				bpmftxtAmount = (TextView) this.findViewById(R.id.bpmftxtInfoAmount);
+				bpmftxtAmount.setText(bpmftotal);
+				eztxtAmount = (TextView) this.findViewById(R.id.eztxtInfoAmount);
+				eztxtAmount.setText(eztotal);
+				relatedtxtAmount = (TextView) this.findViewById(R.id.relatedtxtInfoAmount);
+				relatedtxtAmount.setText(relatedtotal);
 
-			int dictotal = 0;
+
+			} catch (Exception e) {
+				e.printStackTrace();
+			}
+			//
+			String dictotal = null;
 			try {
-				dictotal = limedb.countUserdic();
-			} catch (Exception e) {
-			}
+				// modified by Jeremy '10, 3,12
+				//dictotal = limedb.countUserdic();
+				SharedPreferences settings = ctx.getSharedPreferences(TOTAL_USERDICT_RECORD, 0);
+				String recordString = settings.getString(TOTAL_USERDICT_RECORD, "0");
+				dictotal = recordString;
+			} catch (Exception e) {}
 
-			String version = "";
+			String version = new String("");
+			String cjversion=new String("");
+			String dayiversion=new String("");
+			String bpmfversion=new String("");
+			String ezversion=new String("");
+			String relatedversion=new String("");
 			try {
 				SharedPreferences settings = ctx.getSharedPreferences( MAPPING_VERSION, 0);
 				version = settings.getString(MAPPING_VERSION, "");
@@ -223,14 +324,67 @@ public class LIMESetting extends Activity {
 				}
 				txtVersion = (TextView) this.findViewById(R.id.txtInfoVersion);
 				txtVersion.setText(version);
-			} catch (Exception e) {}
+
+				SharedPreferences cjsettings = ctx.getSharedPreferences( CJ_MAPPING_VERSION, 0);
+				cjversion = cjsettings.getString(CJ_MAPPING_VERSION, "");
+				if(cjversion == null || cjversion.equals("")){
+					SharedPreferences mappingtempset = ctx.getSharedPreferences(CJ_MAPPING_FILE_TEMP, 0);
+					cjversion = mappingtempset.getString(CJ_MAPPING_FILE_TEMP, "");
+				}
+				cjtxtVersion = (TextView) this.findViewById(R.id.cjtxtInfoVersion);
+				cjtxtVersion.setText(cjversion);
+
+				SharedPreferences dayisettings = ctx.getSharedPreferences( DAYI_MAPPING_VERSION, 0);
+				dayiversion = dayisettings.getString(DAYI_MAPPING_VERSION, "");
+				if(dayiversion == null || dayiversion.equals("")){
+					SharedPreferences mappingtempset = ctx.getSharedPreferences(DAYI_MAPPING_FILE_TEMP, 0);
+					dayiversion = mappingtempset.getString(DAYI_MAPPING_FILE_TEMP, "");
+				}
+				dayitxtVersion = (TextView) this.findViewById(R.id.dayitxtInfoVersion);
+				dayitxtVersion.setText(dayiversion);
+
+				SharedPreferences bpmfsettings = ctx.getSharedPreferences( BPMF_MAPPING_VERSION, 0);
+				bpmfversion = bpmfsettings.getString(BPMF_MAPPING_VERSION, "");
+				if(bpmfversion == null || bpmfversion.equals("")){
+					SharedPreferences mappingtempset = ctx.getSharedPreferences(BPMF_MAPPING_FILE_TEMP, 0);
+					bpmfversion = mappingtempset.getString(BPMF_MAPPING_FILE_TEMP, "");
+				}
+				bpmftxtVersion = (TextView) this.findViewById(R.id.bpmftxtInfoVersion);
+				bpmftxtVersion.setText(bpmfversion);
+
+				SharedPreferences ezsettings = ctx.getSharedPreferences( EZ_MAPPING_VERSION, 0);
+				ezversion = ezsettings.getString(EZ_MAPPING_VERSION, "");
+				if(ezversion == null || ezversion.equals("")){
+					SharedPreferences mappingtempset = ctx.getSharedPreferences(EZ_MAPPING_FILE_TEMP, 0);
+					ezversion = mappingtempset.getString(EZ_MAPPING_FILE_TEMP, "");
+				}
+				eztxtVersion = (TextView) this.findViewById(R.id.eztxtInfoVersion);
+				eztxtVersion.setText(ezversion);
+
+				SharedPreferences relatedsettings = ctx.getSharedPreferences( RELATED_MAPPING_VERSION, 0);
+				relatedversion = relatedsettings.getString(RELATED_MAPPING_VERSION, "");
+				if(relatedversion == null || relatedversion.equals("")){
+					SharedPreferences mappingtempset = ctx.getSharedPreferences(RELATED_FILE_TEMP, 0);
+					relatedversion = mappingtempset.getString(RELATED_FILE_TEMP, "");
+				}
+				relatedtxtVersion = (TextView) this.findViewById(R.id.relatedtxtInfoVersion);
+				relatedtxtVersion.setText(relatedversion);
+			} catch (Exception e) {e.printStackTrace();}
 
 			limedb = new LimeDB(this);
 
 
 			txtDictionaryAmount = (TextView) this
 					.findViewById(R.id.txtInfoDictionaryAmount);
-			txtDictionaryAmount.setText(String.valueOf(dictotal));
+			// modified by Jeremy '10, 3,12
+			//txtDictionaryAmount.setText(String.valueOf(dictotal));
+			txtDictionaryAmount.setText(dictotal);
+
+
+
+			//this.findViewById(R.id.SettingsView).forceLayout();
+			this.findViewById(R.id.SettingsView).invalidate();
+
 
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -242,10 +396,10 @@ public class LIMESetting extends Activity {
 	 *
 	 * @param path
 	 */
-	public void selectLimeFile(String path) {
+	public void selectLimeFile(String path, String tablename) {
 
 		// Retrieve Filelist
-		filelist = getAvailableFiles(path);
+		filelist = getAvailableFiles(path, tablename);
 
 		ArrayList<String> showlist = new ArrayList<String>();
 
@@ -276,12 +430,13 @@ public class LIMESetting extends Activity {
 
 		ArrayAdapter<String> adapterlist = new ArrayAdapter<String>(this,
 				R.layout.filerow, showlist);
+		final String table = new String(tablename);
 		ListView listview = (ListView) view.findViewById(R.id.list);
 		listview.setAdapter(adapterlist);
 		listview.setOnItemClickListener(new OnItemClickListener() {
 			public void onItemClick(AdapterView<?> arg0, View vi, int position,
 					long id) {
-				selectLimeFile(filelist.get(position).getAbsolutePath());
+				selectLimeFile(filelist.get(position).getAbsolutePath(), table);
 			}
 		});
 
@@ -312,7 +467,7 @@ public class LIMESetting extends Activity {
 	 * @param path
 	 * @return
 	 */
-	private ArrayList<File> getAvailableFiles(String path) {
+	private ArrayList<File> getAvailableFiles(String path, String tablename) {
 
 		ArrayList<File> templist = new ArrayList<File>();
 
@@ -338,32 +493,35 @@ public class LIMESetting extends Activity {
 			File list[] = rootPath.listFiles();
 			for (File unit : list) {
 				if (unit.isDirectory()
-						|| (unit.isFile() && unit.getName().toLowerCase()
-								.endsWith(".lime"))) {
+						|| (unit.isFile() && unit.getName().toLowerCase().endsWith(".lime"))
+						|| (unit.isFile() && unit.getName().toLowerCase().endsWith(".cin"))) {
 					templist.add(unit);
 				}
 			}
 
 		} else if (check.exists() && check.isFile()
-				&& check.getName().toLowerCase().endsWith(".lime")) {
+				&& ( check.getName().toLowerCase().endsWith(".lime") || check.getName().toLowerCase().endsWith(".cin"))  ) {
 
 			hasSelectFile = true;
-			loadMapping(check);
+
+			loadMapping(check,tablename);
+
 
 		}
 		return templist;
 	}
 
+	private AlertDialog mTableDialog;
 	/**
 	 * Import mapping table into database
 	 *
 	 * @param unit
 	 */
-	public void loadMapping(File unit) {
+	public void loadMapping(File unit, String tablename) {
 
 		try {
 			Toast.makeText(this, R.string.lime_setting_notification_db_loading, Toast.LENGTH_LONG).show();
-			DBSrv.loadMapping(unit.getAbsolutePath());
+			DBSrv.loadMapping(unit.getAbsolutePath(), tablename);
 		} catch (RemoteException e) {
 			e.printStackTrace();
 		}
@@ -376,7 +534,7 @@ public class LIMESetting extends Activity {
 	private Handler uiCallback = new Handler() {
 		@Override
 		public void handleMessage(Message msg) {
-			updateInfomation();
+			updateInformation();
 			if (myDialog != null) {
 				myDialog.dismiss();
 			}
@@ -397,6 +555,7 @@ public class LIMESetting extends Activity {
 	 */
 	@Override
 	protected void onPause() {
+		if(thread != null){thread.suspend();}
 		super.onPause();
 		uiCallback.sendEmptyMessage(0);
 	}
@@ -409,7 +568,223 @@ public class LIMESetting extends Activity {
 	@Override
 	protected void onRestart() {
 		// TODO Auto-generated method stub
+		if(thread != null){thread.resume();}
 		super.onRestart();
 	}
+
+	private final int COMMAND_LOAD_TABLE = 0;
+	private final int COMMAND_RESET_TABLE = 1;
+    /**
+     * Add by Jeremy '10, 3, 24 for keyboard picker menu in options menu
+     */
+    private void showTablePicker(final int command){
+	AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setCancelable(true);
+        builder.setIcon(R.drawable.sym_keyboard_done);
+        builder.setNegativeButton(android.R.string.cancel, null);
+        builder.setTitle(getResources().getString(R.string.table_list));
+
+        final CharSequence[] items = getResources().getStringArray(R.array.table);
+
+        builder.setSingleChoiceItems(
+			items,
+			-1,
+			new DialogInterface.OnClickListener() {
+
+			public void onClick(DialogInterface di, int position) {
+                di.dismiss();
+
+                String tablename = new String("mapping");
+
+                switch(position){
+                case 0:
+			tablename = "mapping";
+			break;
+                case 1:
+			tablename = "cj";
+			break;
+                case 2:
+			tablename = "dayi";
+			break;
+                case 3:
+			tablename = "phonetic";
+			break;
+                case 4:
+			tablename = "ez";
+			break;
+                case 5:
+			tablename = "related";
+			break;
+                }
+                switch(command){
+                case COMMAND_LOAD_TABLE:
+			selectLimeFile(localRoot, tablename);
+			//backgroundUpdate();
+			break;
+                case COMMAND_RESET_TABLE:
+			resetMapping(tablename);
+			//backgroundUpdate();
+
+			break;
+                }
+            }
+        });
+
+        mTableDialog = builder.create();
+        mTableDialog.show();
+
+    }
+
+    public void copyRAWFile(InputStream	inStream, String newPath){
+	try{
+		int	bytesum = 0, byteread = 0 ;
+		File newfile = new File(newPath);
+			//if(oldfile.exists() && !newfile.exists()) {
+		if( !newfile.exists()) {
+				//InputStream	inStream = new FileInputStream(oldfile);
+				FileOutputStream fs = new FileOutputStream(newfile);
+                    byte[] buffer  = new byte[102400]; //100k buffer
+			while((byteread = inStream.read(buffer))!=-1){
+				   bytesum     +=     byteread;
+                               System.out.println(bytesum);
+                               fs.write(buffer,     0,     byteread);
+			}
+			inStream.close();
+			}
+		}
+	catch(Exception e){
+		e.printStackTrace();
+           }
+     }
+
+	/* (non-Javadoc)
+	 * @see android.app.Activity#onStart()
+	 */
+	@Override
+	protected void onStart() {
+
+		scrollSetting = (ScrollView) this.findViewById(R.id.SettingsView);
+		scrollSetting.setOnTouchListener(new OnTouchListener(){
+			@Override
+			public boolean onTouch(View v, MotionEvent event) {
+				updateInformation();
+				return false;
+			}
+		});
+
+		// Handle Load Mapping
+		btnLoadLocal = (Button) this.findViewById(R.id.btnLoadLocal);
+		btnLoadLocal.setOnClickListener(new OnClickListener() {
+			public void onClick(View v) {
+				 // return if db is busy.
+				SharedPreferences importset = ctx.getSharedPreferences(MAPPING_LOADING, 0);
+				if( (importset.getString(MAPPING_LOADING, "no")).equals("yes")){
+					Toast.makeText(v.getContext(), R.string.lime_setting_notification_db_busy, Toast.LENGTH_LONG).show();
+					return;
+				}
+				hasSelectFile = false;
+				showTablePicker(COMMAND_LOAD_TABLE);
+				//selectLimeFile(localRoot);
+			}
+		});
+
+		// Handle Reset Mapping
+		btnReset = (Button) this.findViewById(R.id.btnReset);
+		btnReset.setOnClickListener(new OnClickListener() {
+			public void onClick(View v) {
+				/* Move to resetMapping()
+				try {
+				Toast.makeText(v.getContext(), R.string.lime_setting_notification_mapping_reset, Toast.LENGTH_LONG).show();
+				DBSrv.resetMapping();
+				} catch (RemoteException e) {
+					e.printStackTrace();
+				}
+				*/
+
+				// Reset Mapping Database
+				ctx.getSharedPreferences(MAPPING_LOADING, 0).edit().putString(MAPPING_LOADING, "no").commit();
+
+
+				 // return if db is busy.
+				SharedPreferences importset = ctx.getSharedPreferences(MAPPING_LOADING, 0);
+				if( (importset.getString(MAPPING_LOADING, "no")).equals("yes")){
+					Toast.makeText(v.getContext(), R.string.lime_setting_notification_db_busy, Toast.LENGTH_LONG).show();
+					return;
+				}
+				showTablePicker(COMMAND_RESET_TABLE);
+				updateInformation();
+			}
+		});
+
+		// Handle Reset Dictionary
+		btnResetDictionary = (Button) this.findViewById(R.id.btnResetDictionary);
+		btnResetDictionary.setOnClickListener(new OnClickListener() {
+			public void onClick(View v) {
+				// return if db is busy.
+				SharedPreferences importset = ctx.getSharedPreferences(MAPPING_LOADING, 0);
+				if( (importset.getString(MAPPING_LOADING, "no")).equals("yes")){
+					Toast.makeText(v.getContext(), R.string.lime_setting_notification_db_busy, Toast.LENGTH_LONG).show();
+					return;
+				}
+				try {
+					Toast.makeText(v.getContext(), R.string.lime_setting_notification_userdic_reset, Toast.LENGTH_LONG).show();
+					DBSrv.resetUserBackup();
+				} catch (RemoteException e) {
+					e.printStackTrace();
+				}
+				updateInformation();
+			}
+		});
+
+		// Backup Related Database
+		btnBackup = (Button) this.findViewById(R.id.btnBackup);
+		btnBackup.setOnClickListener(new OnClickListener() {
+			public void onClick(View v) {
+				 // return if db is busy.
+				SharedPreferences importset = ctx.getSharedPreferences(MAPPING_LOADING, 0);
+				if( (importset.getString(MAPPING_LOADING, "no")).equals("yes")){
+					Toast.makeText(v.getContext(), R.string.lime_setting_notification_db_busy, Toast.LENGTH_LONG).show();
+					return;
+				}
+				try {
+					Toast.makeText(v.getContext(), R.string.lime_setting_backup_message, Toast.LENGTH_LONG).show();
+					DBSrv.executeUserBackup();
+				} catch (RemoteException e) {
+					e.printStackTrace();
+				}
+				updateInformation();
+				//backgroundUpdate();
+			}
+		});
+
+		// Restore Related Database
+		btnRestore = (Button) this.findViewById(R.id.btnRestore);
+		btnRestore.setOnClickListener(new OnClickListener() {
+			public void onClick(View v) {
+				 // return if db is busy.
+
+				SharedPreferences importset = ctx.getSharedPreferences(MAPPING_LOADING, 0);
+				if( (importset.getString(MAPPING_LOADING, "no")).equals("yes")){
+					Toast.makeText(v.getContext(), R.string.lime_setting_notification_db_busy, Toast.LENGTH_LONG).show();
+					return;
+				}
+				try {
+					Toast.makeText(v.getContext(), R.string.lime_setting_restore_message, Toast.LENGTH_LONG).show();
+					DBSrv.restoreRelatedUserdic();
+				} catch (RemoteException e) {
+					e.printStackTrace();
+				}
+				//backgroundUpdate();
+			}
+		});
+
+		// Update Information
+		updateInformation();
+
+		super.onStart();
+	}
+
+
+
 
 }
